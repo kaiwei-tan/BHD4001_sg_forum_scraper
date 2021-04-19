@@ -1,0 +1,162 @@
+---
+output:
+  word_document: default
+  html_document: default
+---
+# Forum Scraping
+```{r, warning=FALSE, message=FALSE}
+library(dplyr)
+library(rvest)
+library(tidyverse)
+```
+```{r, eval=FALSE}
+forum_text_hwz <- readRDS("forum_text_hwz.rds")
+forum_text_sbf <- readRDS("forum_text_sbf.rds")
+```
+
+### Hardware Zone forums (HWZ)
+```{r, eval=FALSE}
+# get page count
+url_hwz <- "https://forums.hardwarezone.com.sg/eat-drink-man-woman-16/"
+html_hwz <- read_html(url_hwz)
+
+page_count_hwz <-
+  html_nodes(html_hwz, '.desc') %>%
+  html_text() %>%
+  gsub('.*of ', '', .) %>%
+  as.integer()
+
+paste('Page count:', page_count_hwz[1], sep=' ')
+```
+```{r, eval=FALSE}
+start_time <- Sys.time() # TIME
+
+part_links <- vector()
+
+# take the first 100 pages with the most replies
+for (i in 1:100) {
+  url_hwz <- paste("https://forums.hardwarezone.com.sg/eat-drink-man-woman-16/index", i,
+                   ".html?sort=replycount&order=desc",
+                   sep='')
+  html_hwz <- read_html(url_hwz)
+  
+  part_links_temp <-
+    html_nodes(html_hwz, '#threadslist') %>% 
+    html_children() %>% 
+    html_nodes('a') %>%
+    html_attr('href')
+  
+  part_links_temp <- 
+    part_links_temp[
+      -grep('\\/eat-drink-man-woman-16\\/[[:punct:]]|users|misc|\\#post|\\-\\d\\.html', part_links_temp)] %>%
+    unique()
+  
+  part_links <- c(part_links, part_links_temp)
+}
+```
+```{r, eval=FALSE}
+start_time <- Sys.time() # TIME
+
+forum_text_hwz <- vector()
+
+for (i in 1:length(part_links)) {
+  url_hwz_post <- paste("https://forums.hardwarezone.com.sg", part_links[i], sep='')
+  html_hwz_post <- read_html(url_hwz_post)
+  
+  forum_text_temp <-
+    html_nodes(html_hwz_post, '.post_message') %>%
+    html_text()
+  
+  # limit to 280 characters (twitter limit as benchmark)
+  # also removes html remnants
+  forum_text_temp <-
+    forum_text_temp[nchar(forum_text_temp) <= 280] %>%
+    gsub('[[:cntrl:]]', ' ', .)
+  
+  forum_text_hwz <- c(forum_text_hwz, forum_text_temp) %>% unique()
+}
+
+end_time <- Sys.time() # TIME
+end_time - start_time # TIME
+```
+```{r, eval=FALSE}
+paste('Number of forum comments:', length(forum_text_hwz), sep=' ')
+```
+
+### SammyBoy forums (SBF)
+```{r, eval=FALSE}
+# get page count
+url_sbf <- "https://www.sammyboy.com/forums/the-courtyard-cafe.2/"
+html_sbf <- read_html(url_sbf)
+
+page_count_sbf <-
+  html_nodes(html_sbf, '.block-outer') %>%
+  html_children() %>%
+  html_text() %>%
+  gsub('[[:cntrl:]]', '', .) %>%
+  gsub('.*of ', '', .) %>%
+  gsub('[[:alpha:]]', '', .) %>%
+  as.integer()
+
+paste('Page count:', page_count_sbf[1], sep=' ')
+```
+```{r, eval=FALSE}
+part_links <- vector()
+
+# select random sample of 30 pages
+page_count_sbf <- sample(1:page_count_sbf, 30, replace=TRUE)
+
+for (page_no in page_count_sbf) {
+  url_sbf <- paste("https://www.sammyboy.com/forums/the-courtyard-cafe.2/page-", page_no,
+                   sep='')
+  html_sbf <- read_html(url_sbf)
+  
+  part_links_temp <-
+    html_nodes(html_sbf, '.structItem-cell--main') %>% 
+    html_children() %>% 
+    html_nodes('a') %>%
+    html_attr('href')
+  
+  part_links_temp <- 
+    part_links_temp[
+      -grep('\\/members', part_links_temp)] %>%
+    unique()
+  
+  part_links <- c(part_links, part_links_temp)
+}
+```
+```{r, eval=FALSE}
+forum_text_sbf <- vector()
+
+for (i in 1:length(part_links)) {
+  url_sbf_post <- paste("https://www.sammyboy.com", part_links[i], sep='')
+  html_sbf_post <- read_html(url_sbf_post)
+  
+  forum_text_temp <-
+    html_nodes(html_sbf_post, '.bbWrapper') %>%
+    html_text()
+  
+  # limit to 280 characters (twitter limit as benchmark)
+  # also removes html remnants
+  forum_text_temp <-
+    forum_text_temp[nchar(forum_text_temp) <= 280] %>%
+    gsub('[[:cntrl:]]', ' ', .)
+  
+  forum_text_sbf <- c(forum_text_sbf, forum_text_temp) %>% unique()
+}
+```
+```{r, eval=FALSE}
+paste('Number of forum comments:', length(forum_text_sbf), sep=' ')
+```
+
+### Combining
+```{r, eval=FALSE}
+# remove repeated comments, if any
+forum_text <- c(forum_text_hwz, forum_text_sbf) %>% unique()
+
+forum_text %>% saveRDS("forum_text.rds")
+
+print(paste('Total forum comments:', length(forum_text), sep=' '))
+```
+
+
